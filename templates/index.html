@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Creative Writing Assistant</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <nav class="navbar">
+            <h1>Creative Writing Assistant</h1>
+            <p class="subtitle">Your AI-powered writing companion</p>
+        </nav>
+        
+        <div class="content">
+            <div class="writing-section">
+                <textarea id="story" placeholder="Start writing your story here...&#10;&#10;Press 'Save Paragraph' when you complete a paragraph to get it analyzed."></textarea>
+                <div class="button-group">
+                    <button id="save-btn" class="btn primary">
+                        <span class="icon">📝</span>
+                        Save Paragraph
+                    </button>
+                    <button id="rerender-btn" class="btn accent">
+                        <span class="icon">🔄</span>
+                        Rerender Summaries
+                    </button>
+                    <button id="clear-btn" class="btn secondary">
+                        <span class="icon">🗑️</span>
+                        Clear
+                    </button>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <div class="recommendation-section">
+                    <h2>Plot Recommendations</h2>
+                    <button id="recommend-btn" class="btn accent">
+                        <span class="icon">💡</span>
+                        Get Ideas
+                    </button>
+                    <div id="suggestion" class="suggestion-box"></div>
+                </div>
+                <div class="stats-section">
+                    <h3>Writing Stats</h3>
+                    <div class="stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Words</span>
+                            <span id="word-count" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Paragraphs</span>
+                            <span id="para-count" class="stat-value">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <script>
+        let paragraphCount = 0;
+        let lastProcessedText = '';
+        
+        function updateWordCount() {
+            const text = document.getElementById('story').value;
+            const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+            document.getElementById('word-count').textContent = wordCount;
+        }
+
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.style.display = 'block';
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+        }
+
+        async function saveLastParagraph() {
+            const story = document.getElementById('story').value;
+            const paragraphs = story.split('\n').filter(p => p.trim());
+            const lastParagraph = paragraphs[paragraphs.length - 1];
+            
+            // Check if this paragraph was already processed
+            if (lastParagraph && lastParagraph !== lastProcessedText) {
+                try {
+                    const response = await fetch('/save_paragraph', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ paragraph: lastParagraph }),
+                    });
+
+                    const result = await response.json();
+                    if (result.summary) {
+                        lastProcessedText = lastParagraph;
+                        paragraphCount++;
+                        document.getElementById('para-count').textContent = paragraphCount;
+                        showNotification('Paragraph saved and summarized!');
+                    } else {
+                        showNotification(result.error, 'error');
+                    }
+                } catch (error) {
+                    showNotification('Failed to save paragraph.', 'error');
+                }
+            }
+        }
+
+        // Listen for Enter key in textarea
+        document.getElementById('story').addEventListener('keyup', async (event) => {
+            if (event.key === 'Enter') {
+                await saveLastParagraph();
+            }
+            updateWordCount();
+        });
+
+        // Existing button event listeners
+        document.getElementById('story').addEventListener('input', updateWordCount);
+
+        document.getElementById('clear-btn').addEventListener('click', () => {
+            if (confirm('Are you sure you want to clear the text?')) {
+                document.getElementById('story').value = '';
+                updateWordCount();
+                lastProcessedText = '';
+                paragraphCount = 0;
+                document.getElementById('para-count').textContent = paragraphCount;
+            }
+        });
+
+        document.getElementById('save-btn').addEventListener('click', saveLastParagraph);
+
+        document.getElementById('rerender-btn').addEventListener('click', async () => {
+            const story = document.getElementById('story').value.trim();
+            if (!story) {
+                showNotification('No content to rerender.', 'error');
+                return;
+            }
+
+            const paragraphs = story.split('\n').filter(p => p.trim());
+            
+            try {
+                showNotification('Regenerating summaries...', 'info');
+                
+                const response = await fetch('/rerender_summaries', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ paragraphs: paragraphs }),
+                });
+
+                const result = await response.json();
+                if (result.message) {
+                    showNotification('Summaries regenerated successfully!');
+                    paragraphCount = paragraphs.length;
+                    document.getElementById('para-count').textContent = paragraphCount;
+                    lastProcessedText = paragraphs[paragraphs.length - 1];
+                } else {
+                    showNotification(result.error, 'error');
+                }
+            } catch (error) {
+                showNotification('Failed to regenerate summaries.', 'error');
+            }
+        });
+
+        document.getElementById('recommend-btn').addEventListener('click', async () => {
+            const suggestionDiv = document.getElementById('suggestion');
+            suggestionDiv.innerHTML = '<div class="loading">Generating ideas...</div>';
+            
+            try {
+                const response = await fetch('/recommend', {
+                    method: 'POST',
+                });
+
+                const result = await response.json();
+                if (result.suggestion) {
+                    suggestionDiv.innerHTML = `<div class="suggestion-content">${result.suggestion}</div>`;
+                } else {
+                    suggestionDiv.innerHTML = `<div class="error">${result.error}</div>`;
+                }
+            } catch (error) {
+                suggestionDiv.innerHTML = '<div class="error">Failed to get recommendation.</div>';
+            }
+        });
+    </script>
+</body>
+</html>
