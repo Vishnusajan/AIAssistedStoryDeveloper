@@ -1,5 +1,4 @@
-# Text Summarizer
-
+# AI assisted story development app
 A Flask-based web application that uses OpenAI's API to assist story writers to develop their stories. Whenever the writer adds a new paragraph to the story, the application will use OpenAI's API to generate a summary of the paragraph and stores it in the database. The application will also use OpenAI's API to generate a plot suggestion based on the summaries of the paragraphs when asked by the writer.
 
 ## Features
